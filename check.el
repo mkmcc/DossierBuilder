@@ -29,24 +29,36 @@
 
 ;; LaTeX stuff
 
-(defun build-latex-file (filename files)
+(defun build-latex-file (filename files &optional pagenumbers)
   "makes a LaTeX file which uses pdfpages to combine all of the files
 in the list FILES.  each file opens on an odd page.  output is written
 to FILENAME."
   (with-temp-file filename
     (insert "\\batchmode
 \\documentclass[twoside]{article}
-\\usepackage[letterpaper]{geometry}
+\\usepackage[letterpaper,margin=2cm,marginparwidth=0cm,marginparsep=0cm]{geometry}
 \\usepackage[utf8]{inputenc}
 \\usepackage{hyperref}
-\\usepackage{pdfpages}
-\\pagestyle{empty}
+\\usepackage{pdfpages}\n\n")
 
-\\begin{document}" "\n" "\\tableofcontents\n\n")
+    (if pagenumbers
+        (insert "\\usepackage{fancyhdr}
+
+\\fancypagestyle{plain}{%
+        \\fancyhf{} % clear all header and footer fields
+        \\fancyhead[RO,RE]{\\bfseries \\thepage} % except the center
+        \\renewcommand{\\headrulewidth}{0pt}
+        \\renewcommand{\\footrulewidth}{0pt}}
+\\pagestyle{plain}")
+      (insert "\\pagestyle{empty}"))
+
+    (insert "\n\n\\begin{document}" "\n" "\\tableofcontents\n\n")
 
     (--map (insert "\\cleardoublepage\n\\phantomsection\n"
                    "\\addcontentsline{toc}{section}{" it "}\n"
-                   "\\includepdf[pages={1-}]{" it "}" "\n\n")
+                   "\\includepdf[pages={1-}"
+                   (if pagenumbers ",pagecommand={},scale=0.95" "")
+                   "]{" it "}" "\n\n")
            files)
 
     (insert "\\end{document}" "\n")))
@@ -55,6 +67,7 @@ to FILENAME."
   (call-process "rubber" nil nil nil "-df" filename))
 
 (defun make-latex-file (basename)
+  (message (concat basename "..."))
   (let ((filename (concat basename ".tex")))
     (run-latex-file filename)
     (run-latex-file filename)
@@ -72,7 +85,7 @@ to FILENAME."
   (let* ((basename (s-chop-suffix "/files.lst" (s-chop-prefix "./" keyfile)))
          (filename (concat basename ".tex")))
 
-    (build-latex-file filename (get-all-files keyfile))
+    (build-latex-file filename (get-all-files keyfile) nil)
     (make-latex-file basename)
 
     (concat basename ".pdf")))
@@ -81,7 +94,7 @@ to FILENAME."
 ;; make all the dossiers and assemble into a master file
 
 (let ((dossiers (-map 'make-dossier (get-files "files.lst"))))
-  (build-latex-file "applications.tex" dossiers)
+  (build-latex-file "applications.tex" dossiers t)
   (make-latex-file "applications")
 
   (message "finished!"))
